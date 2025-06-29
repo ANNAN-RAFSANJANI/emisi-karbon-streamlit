@@ -105,22 +105,41 @@ if uploaded_file:
                                   labels={"Global": "Emisi (MtCO₂)", "Year": "Tahun"})
                     st.plotly_chart(fig, use_container_width=True)
 
-                    # Prediksi hanya untuk BLUE
-                    if sheet_choice == 'BLUE':
-                        df_pred = load_model_and_predict(df_global)
-                        df_pred['Type'] = 'Prediksi'
-                        df_all = pd.concat([df_global, df_pred])
+                    # Prediksi Global
+                    df_pred = load_model_and_predict(df_global)
+                    df_pred['Type'] = 'Prediksi'
+                    df_all = pd.concat([df_global, df_pred])
 
-                        st.subheader("📈 Prediksi Emisi 50 Tahun ke Depan (BLUE)")
-                        fig_pred = px.line(df_all, x='Year', y='Global', color='Type', markers=True,
-                                           title="Prediksi Emisi Karbon Global (1850–2073)",
-                                           labels={"Global": "Emisi (MtCO₂)", "Year": "Tahun"})
-                        st.plotly_chart(fig_pred, use_container_width=True)
+                    st.subheader(f"📈 Prediksi Emisi 50 Tahun ke Depan ({sheet_choice})")
+                    fig_pred = px.line(df_all, x='Year', y='Global', color='Type', markers=True,
+                                       title=f"Prediksi Emisi Karbon Global ({df_all['Year'].min()}–{df_all['Year'].max()})",
+                                       labels={"Global": "Emisi (MtCO₂)", "Year": "Tahun"})
+                    st.plotly_chart(fig_pred, use_container_width=True)
 
-                # Siapkan dan tampilkan visualisasi peta dunia
-                df_long = df_sheet.melt(id_vars='Year', var_name='Country', value_name='Emissions')
-                st.subheader("🗺️ Peta Dunia Emisi Karbon per Negara")
-                fig_map = world_map_animation(df_long)
+                # Siapkan data historis negara
+                df_country = df_sheet.drop(columns=['Global']).copy()
+                df_country = df_country.dropna()
+                df_country_long = df_country.melt(id_vars='Year', var_name='Country', value_name='Emissions')
+
+                # Prediksi per negara
+                predicted_country = {}
+                for country in df_country.columns[1:]:
+                    series = df_country[['Year', country]].dropna()
+                    if len(series) >= 50:
+                        try:
+                            df_tmp = pd.DataFrame({'Year': series['Year'], 'Global': series[country]})
+                            df_future = load_model_and_predict(df_tmp)
+                            df_future = df_future.rename(columns={'Global': 'Emissions'})
+                            df_future['Country'] = country
+                            predicted_country[country] = df_future
+                        except:
+                            continue
+
+                df_pred_country = pd.concat(predicted_country.values(), ignore_index=True) if predicted_country else pd.DataFrame()
+                df_all_map = pd.concat([df_country_long, df_pred_country], ignore_index=True)
+
+                st.subheader("🗺️ Peta Dunia Emisi Karbon per Negara (Termasuk Prediksi)")
+                fig_map = world_map_animation(df_all_map)
                 st.plotly_chart(fig_map, use_container_width=True)
 
         except Exception as e:
